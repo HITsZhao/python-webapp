@@ -219,15 +219,134 @@ def with_connection(func):
 	return _wrapper
 
 
+# 对select操作的封装: 输入sql语句和tuple形式的参数, first == True 表示取下一个值，first == False 表示取所有值
+
+def _select(sql, first, *args):
+	'''
+	execute select SQL with args
+	if first:
+		fetchone()
+	else:
+		fetchall()
+	'''
+	global _db_ctx
+	cursor = None
+	sql = sql.replace('?', '%s') #使用?占位符，防止注入攻击
+	logging.info('SQL: %s, ARGS: %s', % (sql, args))
+	try:
+		cursor = _db_ctx.connection.cursor()
+		cursor.execute(sql,args)
+		if cursor.description:
+			names = [x[0] for x in cursor.description]
+		if first:
+			values = cursor.fetchone()
+			if not values:
+				return None
+			return Dict(names,values)
+		return [Dict(names,x) for x in cursor.fetchall()]
+	finally:
+		if cursor:
+			cursor.close()
+
+# 执行sql语句，并返回一个值
+@with_connection
+def select_one(sql, *args):
+	'''
+	excecute sql with args and expected one result
+	if no result found, return None
+	if multi results found, return one
+	
+	i.e.
+	>>> u1 = dict(id=100,name='Alice',email='alice@org.net',passwd='Abc-12345',last_modified=time.time())
+	>>> u2 = dict(id=101,name='Sarah',email='Sarah@org.net',passwd='Abc-12345',last_modified=time.time())
+	>>> insert('user',**u1)
+	1
+	>>> insert('user',**u2)
+	1
+	>>> u = select_one('select * from user where id=?',100)
+	>>> u.name
+	u'Alice'
+	'''
+	return _select(sql,True,*args)
+
+@with_connection
+def select(sql,*args):
+	'''
+	Execute select sql and return list, if no result,return empty list
+	'''
+	return _select(sql,False,*args)
+
+
+class _TransactionCtx(object):
+	'''
+	_TransactionCtx object that can handle transactions
+
+	with _TransactionCtx():
+		pass
+	'''
+
+	def __enter__(self):
+		global _db_ctx
+		self.should_close_conn = False
+		if not _db_ctx.is_init():
+			_db_ctx.init()
+			self.should_close_conn = True
+		_db_ctx.transactions = _db_transactions + 1
+		logging.info('begin transaction...' if _db_ctx.transaction == 1 else 'join current transaction')
+		return self
+
+	def __exit__(self, exctype, excvalue, traceback):
+		global _db_ctx
+		_db_ctx.transactions = _db_ctx.transactions - 1
+		try:
+			if _db_ctx.tansactions == 0:
+				if exctype is None:
+					self.commit()
+				else:
+					self.rollback()
+
+		finally:
+			if self.should_close_conn:
+				_db_ctx.cleanup()
 
 
 
+	def commit(self):
+		global _db_ctx
+		logging.info('commit transaction...')
+		try:
+			_db_ctx.connection.commit()
+			logging.info('commit ok.')
+		except:
+			logging.warning('commit failed, try rollback...')
+			_db_ctx.rollback()
+			logging.warning('rollback ok.')
+			raise
+	def rollback(self):
+		global _db_cgtx
+		logging.warning('rollback transaction...')
+		_db_ctx.connection.rollback()
+		logging.info('rollbakc ok.')
 
 
+def transaction():
+	'''
+	create a transaction object so can use with statement:
+	
+	with transaction():
+		pass
+	
+	>>> def update_profile(id,name,rollback):
+	...		u = dict(id=id, name=name,email='%s@org.net' % name, passwd=name, last_modified=time.time())
+	...		insert('user',**u)
+	...		r = update('update user set passwd=? where id=?', name.upper(), id)
+	...		if rollback:
+				raise StandardError('will cause rollback...')
+	>>> with transaction():
+	...		update_profile(900301,'python',False)
 
-
-
-
+	>>> select_one('select * from user where id=?',900301).name
+	u'python'
 
 
 
