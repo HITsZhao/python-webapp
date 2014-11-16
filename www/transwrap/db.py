@@ -276,6 +276,41 @@ def select(sql,*args):
 	'''
 	return _select(sql,False,*args)
 
+@with_connection
+def _update(sql, *args):
+	global _db_ctx
+	cursor = None
+	sql = sql.replace('?', '%s')
+	logging.info('SQL:%s, ARGS: %s' % (sql,args))
+	try:
+		cursor = _db_ctx.connection.cursor()
+		cursor.execute(sql,args)
+		r = cursor.rowcount
+		if _db_ctx.transaction == 0:
+			logging.info('auto commit')
+			_db_ctx.connection.commit()
+		return r
+	finally:
+		if cursor:
+			cursor.close()
+
+def insert(table, **kw):
+	'''
+	Execute insert SQL.
+	>>> u1 = dict(id=2000, name='Bob', email='bob@test.org', passwd='bobobob', last_modified=time.time())
+	>>> insert('user',**u1)
+	1
+	>>> u2 = select_one('select * from user where id=?',2000)
+	>>> u2.name
+	Bob
+	'''
+	cols,args = zip(*kw.iteritems())
+	sql = 'insert into `%s` (%s) values (%s)' % (table, ','.join(['`%s`' % col for col in cols]), ','.join(['?' for i in range(len(cols))]))
+	return _update(sql, *args)
+
+def update(sql, *args):
+	return _update(sql, *args)
+
 
 class _TransactionCtx(object):
 	'''
@@ -347,21 +382,31 @@ def transaction():
 
 	>>> select_one('select * from user where id=?',900301).name
 	u'python'
+	'''
 
+	return _TransactionCtx()
 
+def with_transaction(func)
+	'''
+	A decorator that makes function around transaction
+	'''
+	@functools.wraps(func)
+	def _wrapper(*args, **kw):
+		_start = time.time()
+		with _TransactionCtx():
+			return func(*args, **kw)
+		_profiling(_start)
+	return _wrapper
 
+	
 
-
-
-
-
-
-
-
-
-
-
-
+if __name__=='__name__':
+	logging.basicConfig(level=logging.DEBUG)
+	create_engine('www-data','www-data','test')
+	update('drop table if exists user')
+	update('create table user (id int primary key, name text, email text, passwd text, last_modified real)')
+	import doctest
+	doctest.testmode()
 
 
 
