@@ -12,24 +12,19 @@ import time, uuid, functools, threading, logging
 class Dict(dict):
 	'''
 	Simple dict but support access as x.y style
-	1. same with setting dict attribute
 	>>> d1 = Dict()
 	>>> d1['x'] = 100
 	>>> d1.x
 	100
-	2. __SetAttr__ of Dict
 	>>>d1.y = 200
 	>>>d1['y']
 	200
-	3. __init__(**kw) of Dict
 	>>>d2 = Dict(a=1, b=2, c='3')
 	>>>d2.c
 	'3'
-	4. __init__(*arg) of Dict
 	>>>d3 = Dict(('a', 'b', 'c'),(1,2,3))
 	>>>d3.a
 	1
-	5. Exception:
 	>>>d3['empty']
 	Traceback(most recent call last):
 	...
@@ -59,7 +54,6 @@ def _profiling(start, sql=''):
 		logging.warning('[PROFILING] [DB] %s: %s' % (t, sql))
 	else:
 		logging.info('[PROFILING] [DB] %s: %s' % (t, sql))
-
 
 class DBError(Exception):
 	pass
@@ -101,15 +95,6 @@ def creat_engine(user, password, database, host='127.0.0.1', port=3306,**kw):
 class _LazyConnection(object):
 	'''
 	lazyConnection with method: cursor, commit, rollback, and cleanup
-
-	>>>_LazyConnection.cursor()
-	get database connection from global engine, and return connection.cursor
-	>>>_LazyConnection.commit()
-	excecute the method connection.commit() to commit changes to database
-	>>>_LazyConnection.rollback()
-	excecute the method connnection.rollback() to rollback of database
-	>>>_LazyConnection.cleanup()
-	excecute the method connection.close() to close connection to database
 	'''
 	def __init__(self):
 		self.connection = None
@@ -148,7 +133,7 @@ class _DbCtx(threading.local):
 	'''
 	def __init__(self):
 		self.connection 	= None
-		self.transactions	= 4
+		self.transactions	= 0
 
 	def is_init(self):
 		return not self.connection is None
@@ -190,9 +175,9 @@ class _ConnectionCtx(object):
 def connection()
 	'''
 	return _ConnectionCtx that can be used with "with"
-	>>> connect = connection()
-	>>> with connect:
-			pass
+	connect = connection()
+	with connect:
+		pass
 	'''
 	return _ConnectionCtx()
 
@@ -397,16 +382,15 @@ def with_transaction(func)
 			return func(*args, **kw)
 		_profiling(_start)
 	return _wrapper
-
 	
 
 if __name__=='__name__':
-	logging.basicConfig(level=logging.DEBUG)
-	create_engine('www-data','www-data','test')
-	update('drop table if exists user')
-	update('create table user (id int primary key, name text, email text, passwd text, last_modified real)')
+#	logging.basicConfig(level=logging.DEBUG)
+#	create_engine('www-data','www-data','test')
+#	update('drop table if exists user')
+#	update('create table user (id int primary key, name text, email text, passwd text, last_modified real)')
 	import doctest
-	doctest.testmode()
+	doctest.testmod()
 
 
 
